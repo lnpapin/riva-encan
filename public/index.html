@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Riva — Encan silencieux</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+    <div class="hdr">
+      <div class="hdr-logo">
+        <i class="ti ti-gavel"></i>
+        Riva — Encan silencieux
+        <span id="hdr-mode-badge" class="hdr-live">EN DIRECT</span>
+      </div>
+      <div class="hdr-right">
+        <div id="hdr-countdown-wrap"></div>
+        <button class="hdr-btn" id="hdr-switch-btn" onclick="switchMode()">⚙️ Admin</button>
+      </div>
+    </div>
+    <div id="main-view"><div class="loading-wrap"><div class="spinner"></div><p>Chargement de l'encan…</p></div></div>
+    <div id="modal-container"></div>
+    <div id="lightbox-container"></div>
+    <div id="confirm-container"></div>
+    <div id="toast-container"></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
