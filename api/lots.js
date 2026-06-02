@@ -18,7 +18,9 @@ module.exports = async function handler(req, res) {
       history: (l.bids || [])
         .sort((a, b) => b.amount - a.amount)
         .map(b => ({
-          name: b.name, amount: b.amount, email: b.email,
+          name: b.name,
+          amount: b.amount,
+          email: b.email,
           time: new Date(b.created_at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })
         }))
     }));
@@ -27,16 +29,23 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'POST') {
     const { num, emoji, name, description, mise, retail, status, category, image_url } = req.body;
-    const { data, error } = await supabase.from('lots')
+    const { data, error } = await supabase
+      .from('lots')
       .insert([{ num, emoji, name, description, mise, retail, current: mise, status: status || 'new', category, image_url }])
-      .select().single();
+      .select()
+      .single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(201).json(data);
   }
 
   if (req.method === 'PUT') {
     const { id, ...updates } = req.body;
-    const { data, error } = await supabase.from('lots').update(updates).eq('id', id).select().single();
+    const { data, error } = await supabase
+      .from('lots')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json(data);
   }

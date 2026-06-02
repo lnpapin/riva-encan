@@ -15,7 +15,9 @@ module.exports = async function handler(req, res) {
   const ext = filename.split('.').pop();
   const path = `lots/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-  const { error } = await supabase.storage.from('images').upload(path, buffer, { contentType: mimetype || 'image/jpeg' });
+  const { error } = await supabase.storage
+    .from('images')
+    .upload(path, buffer, { contentType: mimetype || 'image/jpeg' });
   if (error) return res.status(500).json({ error: error.message });
 
   const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(path);

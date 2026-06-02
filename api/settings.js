@@ -18,7 +18,9 @@ module.exports = async function handler(req, res) {
   if (req.method === 'PUT') {
     const { key, value } = req.body;
     if (!key || !value) return res.status(400).json({ error: 'key et value requis' });
-    const { error } = await supabase.from('settings').upsert({ key, value }, { onConflict: 'key' });
+    const { error } = await supabase
+      .from('settings')
+      .upsert({ key, value }, { onConflict: 'key' });
     if (error) return res.status(500).json({ error: error.message });
     return res.status(200).json({ success: true });
   }
