@@ -1,14 +1,7 @@
-// api/upload.js — Upload d'images vers Supabase Storage
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
-
-export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
-
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -18,17 +11,13 @@ export default async function handler(req, res) {
   const { base64, filename, mimetype } = req.body;
   if (!base64 || !filename) return res.status(400).json({ error: 'base64 et filename requis' });
 
-  // Convertir base64 en Buffer
   const buffer = Buffer.from(base64.replace(/^data:image\/\w+;base64,/, ''), 'base64');
-  const ext    = filename.split('.').pop();
-  const path   = `lots/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+  const ext = filename.split('.').pop();
+  const path = `lots/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-  const { error } = await supabase.storage
-    .from('images')
-    .upload(path, buffer, { contentType: mimetype || 'image/jpeg', upsert: false });
-
+  const { error } = await supabase.storage.from('images').upload(path, buffer, { contentType: mimetype || 'image/jpeg' });
   if (error) return res.status(500).json({ error: error.message });
 
   const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(path);
   return res.status(200).json({ url: publicUrl });
-}
+};

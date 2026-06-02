@@ -2,9 +2,6 @@
   "name": "riva-encan",
   "version": "1.0.0",
   "description": "Plateforme d'encan silencieux — Laboratoire Riva",
-  "scripts": {
-    "dev": "node server.js"
-  },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0"
   }
