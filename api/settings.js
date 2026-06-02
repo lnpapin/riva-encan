@@ -16,8 +16,22 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method === 'PUT') {
-    const { key, value } = req.body;
-    if (!key || !value) return res.status(400).json({ error: 'key et value requis' });
+    const { key, value, entries } = req.body;
+
+    // Mise à jour multiple (plusieurs clés en même temps)
+    if (entries && Array.isArray(entries)) {
+      for (const entry of entries) {
+        if (!entry.key || entry.value === undefined) continue;
+        const { error } = await supabase
+          .from('settings')
+          .upsert({ key: entry.key, value: entry.value }, { onConflict: 'key' });
+        if (error) return res.status(500).json({ error: error.message });
+      }
+      return res.status(200).json({ success: true });
+    }
+
+    // Mise à jour simple (une seule clé)
+    if (!key || value === undefined) return res.status(400).json({ error: 'key et value requis' });
     const { error } = await supabase
       .from('settings')
       .upsert({ key, value }, { onConflict: 'key' });

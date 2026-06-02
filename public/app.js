@@ -53,6 +53,8 @@ async function loadSettings() {
   } else {
     closeDateTime = new Date(Date.now() + 2 * 3600000);
   }
+  window.eventTitle    = settings.event_title    || 'Levée de fonds — Laboratoire Riva 2026';
+  window.eventSubtitle = settings.event_subtitle || 'Participez aux enchères et soutenez nos projets de recherche';
 }
 
 /* ════════════════════════════════════════════
@@ -206,8 +208,8 @@ function renderPublic() {
       <input class="search-box" type="text" placeholder="🔍  Rechercher…" value="${lotSearch}" oninput="setSearch(this.value)" />
     </div>
     <div class="hero">
-      <h1>Levée de fonds — Laboratoire Riva 2026</h1>
-      <p>Participez aux enchères et soutenez nos projets de recherche</p>
+      <h1>${window.eventTitle || 'Levée de fonds — Laboratoire Riva 2026'}</h1>
+      <p>${window.eventSubtitle || 'Participez aux enchères et soutenez nos projets de recherche'}</p>
       <div class="countdown-bar">
         <div>
           <div class="cd-label"><i class="ti ti-clock" style="font-size:14px;vertical-align:-2px;margin-right:4px"></i> Temps restant pour enchérir</div>
@@ -413,6 +415,29 @@ function renderAdmin() {
         <div class="adm-stat"><div class="adm-stat-lbl">Participants</div><div class="adm-stat-val">${parts}</div></div>
         <div class="adm-stat"><div class="adm-stat-lbl">Total des offres</div><div class="adm-stat-val orange">${offres}</div></div>
       </div>
+      <div class="close-panel" style="margin-bottom:16px">
+        <div class="close-panel-title"><i class="ti ti-pencil" style="font-size:16px;color:#2cace3"></i> Titre et description de l'événement</div>
+        <div style="display:grid;gap:12px">
+          <div>
+            <label class="cp-lbl">Titre principal</label>
+            <input class="cp-input" type="text" id="evt-title"
+              value="${window.eventTitle || 'Levée de fonds — Laboratoire Riva 2026'}"
+              placeholder="ex : Levée de fonds — Laboratoire Riva 2026" />
+          </div>
+          <div>
+            <label class="cp-lbl">Sous-titre / description</label>
+            <input class="cp-input" type="text" id="evt-subtitle"
+              value="${window.eventSubtitle || 'Participez aux enchères et soutenez nos projets de recherche'}"
+              placeholder="ex : Participez aux enchères et soutenez nos projets" />
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <button class="cp-save-btn" onclick="sauvegarderTitreEvenement()">
+              <i class="ti ti-check" style="font-size:14px;vertical-align:-2px;margin-right:4px"></i>Enregistrer
+            </button>
+            <span id="titre-saved-msg" style="display:none;font-size:13px;color:#1a7a40;font-weight:bold">✅ Sauvegardé !</span>
+          </div>
+        </div>
+      </div>
       <div class="close-panel">
         <div class="close-panel-title"><i class="ti ti-clock" style="font-size:16px;color:#2cace3"></i> Date et heure de fermeture de l'encan</div>
         <div class="cp-grid">
@@ -452,6 +477,32 @@ function refreshAdminStats() {
     if(i===2) el.textContent=parts;
     if(i===3) el.textContent=offres;
   });
+}
+
+async function sauvegarderTitreEvenement() {
+  const title    = document.getElementById('evt-title').value.trim();
+  const subtitle = document.getElementById('evt-subtitle').value.trim();
+  if (!title) { alert('Le titre ne peut pas être vide.'); return; }
+  try {
+    const res = await fetch(`${API}/api/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entries: [
+          { key: 'event_title',    value: title },
+          { key: 'event_subtitle', value: subtitle }
+        ]
+      })
+    });
+    if (!res.ok) throw new Error();
+    window.eventTitle    = title;
+    window.eventSubtitle = subtitle;
+    const msg = document.getElementById('titre-saved-msg');
+    if (msg) { msg.style.display = 'inline'; setTimeout(() => { msg.style.display = 'none'; }, 3000); }
+    showToast("✅ Titre de l'événement mis à jour !");
+  } catch(err) {
+    alert('Erreur lors de la sauvegarde.');
+  }
 }
 
 async function saveCloseDateTime() {
