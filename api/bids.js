@@ -1,17 +1,33 @@
 const { createClient } = require('@supabase/supabase-js');
-const net = require('net');
 const tls = require('tls');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-// Envoi SMTP natif via TLS — aucune dépendance externe
+// Vérifier si l'encan est fermé selon la date configurée
+async function encantEstFerme() {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'close_datetime')
+    .single();
+  if (error || !data) return false;
+  return new Date(data.value) <= new Date();
+}
+
+// Fermer tous les lots automatiquement
+async function fermerTousLesLots() {
+  await supabase
+    .from('lots')
+    .update({ status: 'closed' })
+    .neq('status', 'closed');
+  console.log('✅ Tous les lots ont été fermés automatiquement.');
+}
+
+// Envoi SMTP natif Gmail
 function envoyerSMTP(destinataire, nomDestinataire, sujet, htmlContent) {
   return new Promise((resolve, reject) => {
     const gmailUser = process.env.GMAIL_USER;
     const gmailPass = process.env.GMAIL_PASSWORD;
-
-    // Construire le message MIME
-    const boundary = 'riva_' + Date.now();
     const message = [
       `From: "Encan Riva" <${gmailUser}>`,
       `To: "${nomDestinataire}" <${destinataire}>`,
@@ -21,12 +37,9 @@ function envoyerSMTP(destinataire, nomDestinataire, sujet, htmlContent) {
       ``,
       htmlContent
     ].join('\r\n');
-
     const credentials = Buffer.from(`\0${gmailUser}\0${gmailPass}`).toString('base64');
-
     let step = 0;
     let socket;
-
     const commandes = [
       () => socket.write(`EHLO riva-encan\r\n`),
       () => socket.write(`AUTH PLAIN ${credentials}\r\n`),
@@ -36,27 +49,18 @@ function envoyerSMTP(destinataire, nomDestinataire, sujet, htmlContent) {
       () => socket.write(`${message}\r\n.\r\n`),
       () => { socket.write(`QUIT\r\n`); resolve('ok'); }
     ];
-
-    socket = tls.connect({ host: 'smtp.gmail.com', port: 465 }, () => {
-      // connexion établie
-    });
-
+    socket = tls.connect({ host: 'smtp.gmail.com', port: 465 }, () => {});
     socket.on('data', (data) => {
       const resp = data.toString();
-      console.log('SMTP:', resp.substring(0, 50));
       if (resp.startsWith('220') || resp.startsWith('235') ||
           resp.startsWith('250') || resp.startsWith('354') ||
           resp.startsWith('334') || resp.startsWith('221')) {
-        if (step < commandes.length) {
-          commandes[step]();
-          step++;
-        }
+        if (step < commandes.length) { commandes[step](); step++; }
       } else if (resp.startsWith('5') || resp.startsWith('4')) {
-        reject(new Error('SMTP erreur: ' + resp.substring(0, 100)));
+        reject(new Error('SMTP: ' + resp.substring(0, 100)));
         socket.destroy();
       }
     });
-
     socket.on('error', (err) => reject(err));
     setTimeout(() => { reject(new Error('SMTP timeout')); socket.destroy(); }, 15000);
   });
@@ -70,9 +74,7 @@ async function envoyerNotifications(lot_id, lot_name, lot_num, new_amount, new_b
       .eq('lot_id', lot_id)
       .not('email', 'is', null)
       .lt('amount', new_amount);
-
     if (error || !bids || bids.length === 0) return;
-
     const uniqueBidders = {};
     bids.forEach(b => {
       if (b.email && b.email.includes('@')) {
@@ -81,12 +83,9 @@ async function envoyerNotifications(lot_id, lot_name, lot_num, new_amount, new_b
         }
       }
     });
-
     const recipients = Object.values(uniqueBidders);
     if (recipients.length === 0) return;
-
     const appUrl = process.env.APP_URL || 'https://riva-encan.vercel.app';
-
     for (const bidder of recipients) {
       const html = `<!DOCTYPE html>
 <html lang="fr"><head><meta charset="UTF-8"/></head>
@@ -135,7 +134,6 @@ async function envoyerNotifications(lot_id, lot_name, lot_num, new_amount, new_b
 </td></tr>
 </table></td></tr></table>
 </body></html>`;
-
       try {
         await envoyerSMTP(bidder.email, bidder.name, `🔔 Surpassé — ${lot_num} ${lot_name}`, html);
         console.log(`✅ Notification envoyée à ${bidder.email}`);
@@ -144,7 +142,7 @@ async function envoyerNotifications(lot_id, lot_name, lot_num, new_amount, new_b
       }
     }
   } catch (err) {
-    console.error('Erreur notifications globale:', err.message);
+    console.error('Erreur notifications:', err.message);
   }
 }
 
@@ -160,6 +158,15 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'Champs manquants' });
   }
 
+  // ── Vérifier si l'encan global est fermé ──
+  const ferme = await encantEstFerme();
+  if (ferme) {
+    // Fermer tous les lots dans la base de données
+    await fermerTousLesLots();
+    return res.status(400).json({ error: "L'encan est terminé. Les enchères sont maintenant fermées." });
+  }
+
+  // Vérifier que le lot existe et est ouvert
   const { data: lot, error: lotError } = await supabase
     .from('lots')
     .select('id, num, name, current, status')
@@ -167,9 +174,10 @@ module.exports = async function handler(req, res) {
     .single();
 
   if (lotError || !lot) return res.status(404).json({ error: 'Lot introuvable' });
-  if (lot.status === 'closed') return res.status(400).json({ error: 'Ce lot est fermé' });
+  if (lot.status === 'closed') return res.status(400).json({ error: 'Ce lot est fermé aux enchères' });
   if (amount <= lot.current) return res.status(400).json({ error: `L'offre doit être supérieure à ${lot.current} $` });
 
+  // Enregistrer l'enchère
   const { data: bid, error: bidError } = await supabase
     .from('bids')
     .insert([{ lot_id, name, amount, email: email || null }])
@@ -178,6 +186,7 @@ module.exports = async function handler(req, res) {
 
   if (bidError) return res.status(500).json({ error: bidError.message });
 
+  // Mettre à jour le statut du lot
   const { count } = await supabase
     .from('bids')
     .select('*', { count: 'exact', head: true })

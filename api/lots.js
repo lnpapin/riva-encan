@@ -1,5 +1,29 @@
 const { createClient } = require('@supabase/supabase-js');
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+
+// Vérifier si l'encan est terminé et fermer tous les lots si c'est le cas
+async function verifierEtFermerSiNecessaire() {
+  const { data: setting } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'close_datetime')
+    .single();
+
+  if (!setting) return false;
+
+  const estFerme = new Date(setting.value) <= new Date();
+  if (estFerme) {
+    // Fermer tous les lots qui ne sont pas déjà fermés
+    const { error } = await supabase
+      .from('lots')
+      .update({ status: 'closed' })
+      .neq('status', 'closed');
+    if (!error) console.log('✅ Fermeture automatique de tous les lots');
+    return true;
+  }
+  return false;
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -8,22 +32,28 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   if (req.method === 'GET') {
+    // Vérifier et fermer automatiquement si l'heure est dépassée
+    await verifierEtFermerSiNecessaire();
+
     const { data: lots, error } = await supabase
       .from('lots')
       .select('*, bids(id, name, amount, email, created_at)')
       .order('id');
+
     if (error) return res.status(500).json({ error: error.message });
+
     const formatted = lots.map(l => ({
       ...l,
       history: (l.bids || [])
         .sort((a, b) => b.amount - a.amount)
         .map(b => ({
-          name: b.name,
+          name:   b.name,
           amount: b.amount,
-          email: b.email,
-          time: new Date(b.created_at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })
+          email:  b.email,
+          time:   new Date(b.created_at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })
         }))
     }));
+
     return res.status(200).json(formatted);
   }
 
